@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mô phỏng pH 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: 3D viewport fills the left, instrument panel on the right; stacks on phones. Single dark lab-bench look. */
+:root{
+  --bg:#0a0e1a;
+  --panel:#111830;
+  --line:#243056;
+  --fg:#e6ecff;
+  --muted:#8e9bc4;
+  --accent:#4fd1ff;
+  --na:#ffc933;
+  --acid:#ff5d6c;
+  --ok:#5cf2a0;
+  --font-body:'Be Vietnam Pro',system-ui,sans-serif;
+  --font-data:'JetBrains Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;padding-inline:16px;padding-block:16px}
+.app{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.step{font-family:var(--font-data);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:2px 8px;font-size:12px}
+h1{margin:0;font-size:20px;font-weight:600;text-wrap:balance}
+.stage{position:relative;min-width:0;height:min(72vh,640px);min-height:380px;border:1px solid var(--line);border-radius:10px;background:radial-gradient(ellipse at 50% 40%,#16204a 0%,#0a0e1a 70%);overflow:hidden}
+canvas#view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas#view:active{cursor:grabbing}
+.hint{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--muted);pointer-events:none}
+.legend{position:absolute;left:12px;top:10px;display:grid;gap:6px;font-size:12px;color:var(--muted);pointer-events:none}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.gauge{display:flex;flex-direction:column;align-items:center}
+.gauge canvas{width:100%;max-width:280px;height:auto;aspect-ratio:280/165}
+.state{font-size:13px;color:var(--muted);text-align:center}
+.state b{color:var(--fg)}
+label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+label output{font-family:var(--font-data);color:var(--fg)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+button{font:inherit;font-weight:500;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:6px;padding:9px 10px;cursor:pointer;min-height:40px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.na{border-color:#6b5a1f;color:var(--na)}
+button.ac{border-color:#6b2b34;color:var(--acid)}
+button.goal{grid-column:1/-1;background:var(--accent);color:#04202b;border-color:var(--accent);font-weight:700}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:8px}
+.row span:last-child{font-family:var(--font-data)}
+.chk{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+#over{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+canvas#view{position:relative;z-index:1}
+#arBar{display:none;position:absolute;left:0;right:0;top:0;z-index:4;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;align-items:center;justify-content:space-between;gap:8px}
+#arBar button{background:rgba(10,14,26,.72);backdrop-filter:blur(4px)}
+#arPh{font-family:var(--font-data);font-size:18px;font-weight:600;background:rgba(10,14,26,.72);padding:6px 12px;border-radius:6px}
+.stage.ar{position:fixed;inset:0;z-index:50;height:100%;min-height:0;border:0;border-radius:0}
+.stage.ar #arBar{display:flex}
+.stage.ar .legend,.stage.ar .hint{display:none}
+#phStrip{z-index:3}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none}
+#phStrip{position:absolute;right:0;top:8%;bottom:8%;width:13%;min-width:44px;border-left:1px dashed var(--line);display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;font-family:var(--font-data);font-size:11px;color:var(--muted);pointer-events:none;background:linear-gradient(to bottom,rgba(60,110,255,.28),rgba(60,255,150,.14) 50%,rgba(255,60,60,.28))}
+.msg{font-size:12px;color:var(--muted);margin-top:8px;min-height:1.4em}
+@media(max-width:860px){.app{grid-template-columns:minmax(0,1fr)}.stage{height:56vh}}
+</style>
+
+</head><body>
+<div class="app">
+  <header>
+    <span class="step">3 · 12–18 s</span>
+    <h1>Mảnh đường-axit trong dung dịch và điều chỉnh pH</h1>
+  </header>
+
+  <div class="stage">
+    <canvas id="view" aria-label="Mô hình 3D các mảnh đường-axit, kéo để xoay"></canvas>
+    <div class="legend">
+      <span><i style="background:#ff4d4d"></i>Oxy (O)</span>
+      <span><i style="background:#cfd6e6"></i>Cacbon (C)</span>
+      <span><i style="background:#ffc933"></i>NaOH (Na⁺)</span>
+      <span><i style="background:#ffffff"></i>H⁺ (axit)</span>
+    </div>
+    <canvas id="over"></canvas><div id="phStrip" hidden><span>pH 12</span><span>chụm ở đây<br>để chỉnh pH</span><span>pH 2</span></div><video id="cam" playsinline muted hidden></video>
+    <div id="arBar"><button id="arClose">Thoát</button><span id="arPh">pH 3.0</span><button id="arFlip">Đổi camera</button></div>
+    <div class="hint">Chuột: kéo để xoay · Tay: chụm ngón cái + trỏ rồi di chuyển</div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <button class="goal" id="camBtn" style="width:100%">Bật camera và điều khiển bằng tay</button>
+      <div class="msg" id="camMsg">Chụm ngón cái + trỏ rồi di chuyển để xoay. Hai tay cùng chụm rồi dang ra hoặc thu vào để phóng to. Chụm ở dải bên phải để chỉnh pH.</div>
+    </div>
+    <div class="card gauge">
+      <canvas id="gauge" width="560" height="330"></canvas>
+      <div class="state" id="state"></div>
+    </div>
+    <div class="card">
+      <label for="ph">Độ pH <output id="phOut">3.0</output></label>
+      <input type="range" id="ph" min="2" max="12" step="0.1" value="3">
+      <div class="btns">
+        <button class="na" id="addNa">+ NaOH</button>
+        <button class="ac" id="addH">+ H⁺ (axit)</button>
+        <button class="goal" id="goal">Trung hòa về pH 6.5</button>
+      </div>
+      <div class="row"><span>Nhóm –COOH đã ion hóa</span><span id="ion">0/6</span></div>
+      <div class="row"><span>Ion Na⁺ trong dung dịch</span><span id="naCount">0</span></div>
+      <div class="row"><span>Ion H⁺ tự do</span><span id="hCount">0</span></div>
+      <label class="chk"><input type="checkbox" id="auto" checked> Tự xoay chậm</label>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var PKA = 3.4;
+  var ph = 3.0, phShown = 3.0;
+
+  // ---------- three.js setup ----------
+  var canvas = document.getElementById('view');
+  var renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(42,1,0.1,100);
+  camera.position.set(0,0,15);
+  scene.add(new THREE.AmbientLight(0x8fa0d8,0.75));
+  var key = new THREE.DirectionalLight(0xffffff,1.0); key.position.set(5,8,10); scene.add(key);
+  var rim = new THREE.PointLight(0x4fd1ff,0.9,40); rim.position.set(-8,-4,6); scene.add(rim);
+
+  var world = new THREE.Group(); scene.add(world);
+
+  function glowTex(inner, outer){
+    var c=document.createElement('canvas'); c.width=c.height=64;
+    var x=c.getContext('2d'), g=x.createRadialGradient(32,32,0,32,32,32);
+    g.addColorStop(0,inner); g.addColorStop(0.35,outer); g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g; x.fillRect(0,0,64,64);
+    return new THREE.CanvasTexture(c);
+  }
+  var texNa = glowTex('rgba(255,244,190,1)','rgba(255,201,51,0.85)');
+  var texH  = glowTex('rgba(255,255,255,1)','rgba(190,225,255,0.7)');
+  var texNeg= glowTex('rgba(255,120,120,0.9)','rgba(255,60,60,0.35)');
+  var texStar=glowTex('rgba(255,255,255,1)','rgba(120,220,255,0.6)');
+  function sprite(tex,size){
+    var m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});
+    var s=new THREE.Sprite(m); s.scale.set(size,size,1); return s;
+  }
+
+  // ---------- molecule building ----------
+  var matCache={};
+  function mat(color){return matCache[color]||(matCache[color]=new THREE.MeshStandardMaterial({color:color,roughness:0.35,metalness:0.1}));}
+  var sphereGeo=new THREE.SphereGeometry(1,20,16);
+  var cylGeo=new THREE.CylinderGeometry(1,1,1,10,1);
+  function atom(parent,p,color,r){var m=new THREE.Mesh(sphereGeo,mat(color));m.position.copy(p);m.scale.setScalar(r);parent.add(m);return m;}
+  function bond(parent,a,b,color,w){
+    var d=new THREE.Vector3().subVectors(b,a), len=d.length();
+    var m=new THREE.Mesh(cylGeo,mat(color));
+    m.position.copy(a).addScaledVector(d,0.5);
+    m.scale.set(w||0.055,len,w||0.055);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());
+    parent.add(m);return m;
+  }
+  var CC=0xcfd6e6, OO=0xff4d4d, HH=0xf2f5ff, BOND=0x9aa6c8;
+  function V(x,y,z){return new THREE.Vector3(x,y,z);}
+
+  function buildFragment(){
+    var g=new THREE.Group(), P=[];
+    for(var i=0;i<6;i++){
+      var a=i*Math.PI/3;
+      P.push(V(Math.cos(a)*1.15,(i%2?0.18:-0.18),Math.sin(a)*1.15));
+    }
+    for(i=0;i<6;i++) bond(g,P[i],P[(i+1)%6],BOND,0.06);
+    atom(g,P[0],OO,0.22);
+    for(i=1;i<6;i++) atom(g,P[i],CC,0.2);
+    // hydroxyl groups on carbons 1-4
+    for(i=1;i<=4;i++){
+      var a2=i*Math.PI/3, out=V(Math.cos(a2),0,Math.sin(a2)), up=(i%2?1:-1);
+      var o=P[i].clone().addScaledVector(out,0.75).add(V(0,up*0.55,0));
+      var h=o.clone().addScaledVector(out,0.38).add(V(0,up*0.22,0));
+      bond(g,P[i],o,BOND); bond(g,o,h,0xdbe2f5,0.04);
+      atom(g,o,OO,0.17); atom(g,h,HH,0.1);
+    }
+    // carboxyl group on carbon 5
+    var a5=5*Math.PI/3, out5=V(Math.cos(a5),0,Math.sin(a5));
+    var Cc=P[5].clone().addScaledVector(out5,0.95).add(V(0,0.25,0));
+    var tang=V(-Math.sin(a5),0,Math.cos(a5));
+    var O1=Cc.clone().addScaledVector(out5,0.45).addScaledVector(tang,0.75).add(V(0,0.1,0));
+    var O2=Cc.clone().addScaledVector(out5,0.45).addScaledVector(tang,-0.75).add(V(0,-0.1,0));
+    var H2=O2.clone().addScaledVector(out5,0.2).addScaledVector(tang,-0.4).add(V(0,-0.1,0));
+    bond(g,P[5],Cc,BOND); atom(g,Cc,CC,0.2);
+    bond(g,Cc,O1,0xff8a8a,0.09); atom(g,O1,OO,0.2);
+    bond(g,Cc,O2,BOND); atom(g,O2,OO,0.2);
+    var bH=bond(g,O2,H2,0xdbe2f5,0.04), aH=atom(g,H2,HH,0.1);
+    var glow=sprite(texNeg,1.9); glow.position.copy(O1).add(O2).multiplyScalar(0.5); glow.material.opacity=0; g.add(glow);
+    g.userData={bH:bH,aH:aH,glow:glow,ion:0,thr:0};
+    return g;
+  }
+
+  var frags=[], layout=[[-3.6,2.0,0.5],[0,2.4,-1.2],[3.6,2.0,0.8],[-3.6,-2.0,-0.8],[0,-2.4,1.0],[3.6,-2.0,-0.6]];
+  var thr=[0.5/6,1.5/6,2.5/6,3.5/6,4.5/6,5.5/6].sort(function(){return Math.random()-0.5;});
+  layout.forEach(function(p,i){
+    var f=buildFragment(); f.scale.setScalar(0.85);
+    f.position.set(p[0],p[1],p[2]);
+    f.rotation.set(Math.random()*6,Math.random()*6,Math.random()*6);
+    f.userData.thr=thr[i];
+    f.userData.spin=new THREE.Vector3((Math.random()-0.5)*0.006,(Math.random()-0.5)*0.008,(Math.random()-0.5)*0.006);
+    f.userData.base=f.position.clone(); f.userData.ph=Math.random()*6.28;
+    world.add(f); frags.push(f);
+  });
+
+  // ---------- free ions ----------
+  var ions=[]; var R=7.2;
+  function spawn(kind){
+    var s=sprite(kind==='na'?texNa:texH, kind==='na'?0.7:0.5);
+    var v=new THREE.Vector3(Math.random()-0.5,Math.random()-0.5,Math.random()-0.5);
+    v.normalize().multiplyScalar(Math.random()*R*0.9);
+    s.position.copy(v); s.material.opacity=0;
+    world.add(s);
+    ions.push({s:s,kind:kind,vel:new THREE.Vector3(),life:0,dying:false,size:s.scale.x});
+  }
+  function adjustIons(kind,target){
+    var active=ions.filter(function(p){return p.kind===kind&&!p.dying;});
+    for(var i=active.length;i<target;i++) spawn(kind);
+    for(i=active.length-1;i>=target;i--) active[i].dying=true;
+  }
+  var flashes=[];
+  function flash(n){
+    for(var i=0;i<n;i++){
+      var s=sprite(texStar,0.4); s.position.set((Math.random()-0.5)*9,(Math.random()-0.5)*7,(Math.random()-0.5)*5);
+      world.add(s); flashes.push({s:s,t:0});
+    }
+  }
+
+  // ---------- gauge ----------
+  var gc=document.getElementById('gauge'), gx=gc.getContext('2d');
+  function phColor(v){return 'hsl('+Math.round(Math.max(0,Math.min(14,v))/14*230)+' 85% 55%)';}
+  function drawGauge(v){
+    var W=gc.width,H=gc.height,cx=W/2,cy=H*0.82,r=W*0.4;
+    gx.clearRect(0,0,W,H);
+    gx.lineWidth=W*0.055; gx.lineCap='butt';
+    for(var i=0;i<56;i++){
+      var a0=Math.PI+i/56*Math.PI, a1=Math.PI+(i+1.05)/56*Math.PI;
+      gx.strokeStyle=phColor((i+0.5)/56*14);
+      gx.beginPath(); gx.arc(cx,cy,r,a0,a1); gx.stroke();
+    }
+    gx.fillStyle='#8e9bc4'; gx.font='500 '+(W*0.045)+'px JetBrains Mono, monospace'; gx.textAlign='center';
+    [0,7,14].forEach(function(t){
+      var a=Math.PI+t/14*Math.PI, rr=r+W*0.075;
+      gx.fillText(t,cx+Math.cos(a)*rr,cy+Math.sin(a)*rr+W*0.015);
+    });
+    var an=Math.PI+Math.max(0,Math.min(14,v))/14*Math.PI;
+    gx.strokeStyle='#e6ecff'; gx.lineWidth=W*0.012; gx.lineCap='round';
+    gx.beginPath(); gx.moveTo(cx,cy); gx.lineTo(cx+Math.cos(an)*r*0.86,cy+Math.sin(an)*r*0.86); gx.stroke();
+    gx.fillStyle='#e6ecff'; gx.beginPath(); gx.arc(cx,cy,W*0.028,0,7); gx.fill();
+    gx.fillStyle=phColor(v); gx.font='700 '+(W*0.085)+'px JetBrains Mono, monospace';
+    gx.fillText('pH '+v.toFixed(1),cx,cy+W*0.13);
+  }
+
+  // ---------- UI ----------
+  var $=function(id){return document.getElementById(id);};
+  var slider=$('ph');
+  function setPh(v){ph=Math.max(2,Math.min(12,v));slider.value=ph;}
+  slider.addEventListener('input',function(){ph=parseFloat(slider.value);});
+  $('addNa').onclick=function(){setPh(ph+0.5);flash(6);};
+  $('addH').onclick=function(){setPh(ph-0.5);flash(6);};
+  $('goal').onclick=function(){setPh(6.5);flash(18);};
+  var auto=$('auto'); if(reduce)auto.checked=false;
+
+  function stateText(v){
+    var s=v<6.2?'Môi trường <b>axit</b>':v>7.3?'Môi trường <b>kiềm</b>':'Gần <b>trung tính</b>';
+    if(Math.abs(v-6.5)<0.25) s='<b>Đã điều chỉnh về pH 6.5</b>';
+    return s;
+  }
+
+  // ---------- interaction (drag to rotate, wheel / pinch to zoom) ----------
+  var ptrs={}, lastDist=0, idle=0;
+  canvas.addEventListener('pointerdown',function(e){canvas.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};idle=0;});
+  canvas.addEventListener('pointermove',function(e){
+    var p=ptrs[e.pointerId]; if(!p)return;
+    var ids=Object.keys(ptrs);
+    if(ids.length===1){
+      var dx=e.clientX-p.x, dy=e.clientY-p.y;
+      var q=new THREE.Quaternion().setFromEuler(new THREE.Euler(dy*0.008,dx*0.008,0,'XYZ'));
+      world.quaternion.premultiply(q);
+    } else if(ids.length===2){
+      var o=ids[0]==e.pointerId?ptrs[ids[1]]:ptrs[ids[0]];
+      var d=Math.hypot(e.clientX-o.x,e.clientY-o.y);
+      if(lastDist) zoom((lastDist-d)*0.03);
+      lastDist=d;
+    }
+    p.x=e.clientX;p.y=e.clientY;idle=0;
+  });
+  function up(e){delete ptrs[e.pointerId];lastDist=0;}
+  canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+  function zoom(d){camera.position.z=Math.max(7,Math.min(24,camera.position.z+d));}
+  canvas.addEventListener('wheel',function(e){e.preventDefault();zoom(e.deltaY*0.01);},{passive:false});
+
+  function resize(){
+    var r=canvas.parentNode.getBoundingClientRect();
+    renderer.setSize(r.width,r.height,false);
+    camera.aspect=r.width/r.height; camera.updateProjectionMatrix();
+  }
+  if(window.ResizeObserver) new ResizeObserver(resize).observe(canvas.parentNode); else window.addEventListener('resize',resize);
+  resize();
+
+  // ---------- loop ----------
+  var t=0, ionTxtT=0;
+  function tick(){
+    requestAnimationFrame(tick); t+=0.016;
+    phShown+=(ph-phShown)*0.06;
+    var frac=1/(1+Math.pow(10,PKA-phShown)), nIon=0;
+
+    frags.forEach(function(f){
+      var u=f.userData;
+      f.rotation.x+=u.spin.x; f.rotation.y+=u.spin.y; f.rotation.z+=u.spin.z;
+      f.position.y=u.base.y+Math.sin(t*0.8+u.ph)*0.12;
+      var on=frac>u.thr; if(on)nIon++;
+      u.ion+=((on?1:0)-u.ion)*0.12;
+      u.bH.visible=u.aH.visible=u.ion<0.5;
+      u.glow.material.opacity=u.ion*(0.75+0.2*Math.sin(t*3+u.ph));
+    });
+
+    if(auto.checked && !handBusy && Object.keys(ptrs).length===0){
+      world.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),0.0025));
+    }
+
+    var naT=Math.round(14*Math.max(0,Math.min(1,(phShown-3)/7)));
+    var hT=Math.round(14*Math.max(0,Math.min(1,(7-phShown)/5)));
+    adjustIons('na',naT); adjustIons('h',hT);
+
+    for(var i=ions.length-1;i>=0;i--){
+      var p=ions[i], s=p.s;
+      p.vel.x+=(Math.random()-0.5)*0.006; p.vel.y+=(Math.random()-0.5)*0.006; p.vel.z+=(Math.random()-0.5)*0.006;
+      p.vel.multiplyScalar(0.97); s.position.add(p.vel);
+      var d=s.position.length(); if(d>R) p.vel.addScaledVector(s.position,-0.002*(d-R));
+      if(p.dying){p.life-=0.04; if(p.life<=0){world.remove(s);s.material.dispose();ions.splice(i,1);continue;}}
+      else if(p.life<1) p.life=Math.min(1,p.life+0.04);
+      s.material.opacity=p.life*(0.7+0.3*Math.sin(t*4+i));
+    }
+    for(i=flashes.length-1;i>=0;i--){
+      var fl=flashes[i]; fl.t+=0.03;
+      fl.s.scale.setScalar(0.4+fl.t*1.6); fl.s.material.opacity=Math.max(0,1-fl.t);
+      if(fl.t>=1){world.remove(fl.s);fl.s.material.dispose();flashes.splice(i,1);}
+    }
+
+    drawGauge(phShown);
+    ionTxtT++;
+    if(ionTxtT%6===0){
+      $('phOut').textContent=ph.toFixed(1);
+      $('arPh').textContent='pH '+phShown.toFixed(1);
+      $('ion').textContent=nIon+'/6';
+      $('naCount').textContent=ions.filter(function(p){return p.kind==='na'&&!p.dying;}).length;
+      $('hCount').textContent=ions.filter(function(p){return p.kind==='h'&&!p.dying;}).length;
+      $('state').innerHTML=stateText(phShown);
+    }
+    renderer.render(scene,camera);
+  }
+  // ---------- hand tracking (MediaPipe Hands) ----------
+  var camBtn=$('camBtn'), camMsg=$('camMsg'), over=$('over'), ox=over.getContext('2d'), vid=$('cam'), strip=$('phStrip');
+  var facing='user', stage=document.querySelector('.stage'), handsObj=null, running=false, busy=false, stream=null, handBusy=false;
+  var prevPt=null, prevDist=0, pinchOn=[false,false];
+  function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+  function stopHands(){
+    running=false; handBusy=false; prevPt=null; prevDist=0;
+    if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
+    vid.hidden=true; strip.hidden=true; stage.classList.remove('ar'); ox.clearRect(0,0,over.width,over.height);
+    camBtn.textContent='Bật camera và điều khiển bằng tay';
+  }
+  camBtn.onclick=function(){
+    if(running){stopHands();return;}
+    if(typeof Hands==='undefined'){camMsg.textContent='Chưa tải được thư viện nhận diện tay. Hãy kiểm tra kết nối mạng.';return;}
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camMsg.textContent='Trình duyệt này không cho dùng camera. Hãy mở trang qua HTTPS.';return;}
+    camMsg.textContent='Đang xin quyền camera...';
+    navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:640,height:480},audio:false}).then(function(st){
+      stream=st; vid.srcObject=st; vid.hidden=false; strip.hidden=false; stage.classList.add('ar'); vid.style.transform=facing==='user'?'scaleX(-1)':'none'; vid.play();
+      if(!handsObj){
+        handsObj=new Hands({locateFile:function(f){return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/'+f;}});
+        handsObj.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+        handsObj.onResults(onHands);
+      }
+      running=true; camBtn.textContent='Tắt camera'; camMsg.textContent='Giơ tay vào khung hình, rồi chụm ngón cái và ngón trỏ.';
+      loop();
+    }).catch(function(){camMsg.textContent='Không mở được camera. Hãy cho phép quyền camera cho trang này.';});
+  };
+  $('arClose').onclick=function(){stopHands();};
+  $('arFlip').onclick=function(){facing=facing==='user'?'environment':'user';stopHands();camBtn.onclick();};
+  function loop(){
+    if(!running)return;
+    if(vid.readyState>=2&&!busy){busy=true;handsObj.send({image:vid}).then(function(){busy=false;}).catch(function(){busy=false;});}
+    requestAnimationFrame(loop);
+  }
+  function onHands(res){
+    if(!running)return;
+    var W=over.clientWidth,H=over.clientHeight;
+    if(over.width!==W||over.height!==H){over.width=W;over.height=H;}
+    ox.clearRect(0,0,W,H);
+    var vw=vid.videoWidth||640, vh=vid.videoHeight||480, sc=Math.max(W/vw,H/vh), ofx=(vw*sc-W)/2, ofy=(vh*sc-H)/2, mir=facing==='user';
+    function m(p){var x=mir?1-p.x:p.x; return {x:(x*vw*sc-ofx)/W, y:(p.y*vh*sc-ofy)/H};}
+    var hs=res.multiHandLandmarks||[], pts=[];
+    hs.forEach(function(lm,i){
+      var size=dist(lm[0],lm[9])||1, d=dist(lm[4],lm[8])/size;
+      var on=pinchOn[i]?d<0.55:d<0.38; pinchOn[i]=on;
+      var mp=m({x:(lm[4].x+lm[8].x)/2,y:(lm[4].y+lm[8].y)/2}), px=mp.x, py=mp.y;
+      ox.fillStyle='rgba(79,209,255,.55)';
+      lm.forEach(function(p){var q=m(p);ox.beginPath();ox.arc(q.x*W,q.y*H,3,0,7);ox.fill();});
+      ox.lineWidth=3; ox.strokeStyle=on?'#5cf2a0':'#4fd1ff';
+      ox.beginPath();ox.arc(px*W,py*H,on?10:16,0,7);ox.stroke();
+      if(on){ox.fillStyle='rgba(92,242,160,.5)';ox.fill();pts.push({x:px,y:py});}
+    });
+    for(var j=hs.length;j<pinchOn.length;j++)pinchOn[j]=false;
+    var phPts=pts.filter(function(p){return p.x>0.87;}), free=pts.filter(function(p){return p.x<=0.87;});
+    handBusy=pts.length>0;
+    if(phPts.length){
+      var y=Math.max(0,Math.min(1,(phPts[0].y-0.08)/0.84));
+      setPh(12-y*10);
+    }
+    if(free.length>=2){
+      var dd=dist(free[0],free[1]);
+      if(prevDist) zoom(-(dd-prevDist)*40);
+      prevDist=dd; prevPt=null;
+    } else if(free.length===1){
+      var p=free[0];
+      if(prevPt){
+        var q=new THREE.Quaternion().setFromEuler(new THREE.Euler((p.y-prevPt.y)*6,(p.x-prevPt.x)*6,0,'XYZ'));
+        world.quaternion.premultiply(q);
+      }
+      prevPt={x:p.x,y:p.y}; prevDist=0;
+    } else { prevPt=null; prevDist=0; }
+  }
+
+  // start from a realistic first frame
+
+  for(var k=0;k<4;k++) spawn('h');
+  tick();
+})();
+</script>
+
+</body></html>
