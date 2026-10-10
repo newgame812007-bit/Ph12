@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phức hồng TBA 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: 3D viewport fills the left, instrument panel on the right; stacks on phones. Single dark lab-bench look. */
+:root{
+  --bg:#0a0e1a;
+  --panel:#111830;
+  --line:#243056;
+  --fg:#e6ecff;
+  --muted:#8e9bc4;
+  --accent:#4fd1ff;
+  --na:#ffc933;
+  --acid:#ff5d6c;
+  --ok:#5cf2a0;
+  --font-body:'Be Vietnam Pro',system-ui,sans-serif;
+  --font-data:'JetBrains Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;padding-inline:16px;padding-block:16px}
+.app{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+header{grid-column:1/-1;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.step{font-family:var(--font-data);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:2px 8px;font-size:12px}
+h1{margin:0;font-size:20px;font-weight:600;text-wrap:balance}
+.stage{position:relative;min-width:0;height:min(72vh,640px);min-height:380px;border:1px solid var(--line);border-radius:10px;background:radial-gradient(ellipse at 50% 40%,#16204a 0%,#0a0e1a 70%);overflow:hidden}
+canvas#view{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas#view:active{cursor:grabbing}
+.hint{position:absolute;left:12px;bottom:10px;font-size:12px;color:var(--muted);pointer-events:none}
+.legend{position:absolute;left:12px;top:10px;display:grid;gap:6px;font-size:12px;color:var(--muted);pointer-events:none}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:-1px}
+aside{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.gauge{display:flex;flex-direction:column;align-items:center}
+.gauge canvas{width:100%;max-width:280px;height:auto;aspect-ratio:280/165}
+.state{font-size:13px;color:var(--muted);text-align:center}
+.state b{color:var(--fg)}
+label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+label output{font-family:var(--font-data);color:var(--fg)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+button{font:inherit;font-weight:500;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:6px;padding:9px 10px;cursor:pointer;min-height:40px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.na{border-color:#6b5a1f;color:var(--na)}
+button.ac{border-color:#6b2b34;color:var(--acid)}
+button.goal{grid-column:1/-1;background:var(--accent);color:#04202b;border-color:var(--accent);font-weight:700}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:8px}
+.row span:last-child{font-family:var(--font-data)}
+.chk{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+#over{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+canvas#view{position:relative;z-index:1}
+#arBar{display:none;position:absolute;left:0;right:0;top:0;z-index:4;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;align-items:center;justify-content:space-between;gap:8px}
+#arBar button{background:rgba(10,14,26,.72);backdrop-filter:blur(4px)}
+#arPh{font-family:var(--font-data);font-size:18px;font-weight:600;background:rgba(10,14,26,.72);padding:6px 12px;border-radius:6px}
+.stage.ar{position:fixed;inset:0;z-index:50;height:100%;min-height:0;border:0;border-radius:0}
+.stage.ar #arBar{display:flex}
+.stage.ar .legend,.stage.ar .hint{display:none}
+#phStrip{z-index:3}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;filter:blur(2px) saturate(.65) brightness(.72) contrast(1.05)}
+.stage.ar::after{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(90,210,255,.07) 0 1px,transparent 1px 3px),radial-gradient(ellipse at 50% 48%,rgba(0,40,70,.28) 0%,rgba(2,18,40,.6) 60%,rgba(2,8,22,.9) 100%)}
+#phStrip{position:absolute;right:0;top:8%;bottom:8%;width:13%;min-width:44px;border-left:1px dashed var(--line);display:flex;flex-direction:column;justify-content:space-between;align-items:center;text-align:center;font-family:var(--font-data);font-size:11px;color:var(--muted);pointer-events:none;color:#cfd8ff;text-shadow:0 1px 3px #000;background:linear-gradient(to bottom,rgba(60,110,255,.14),rgba(60,255,150,.05) 50%,rgba(255,60,60,.14))}
+.msg{font-size:12px;color:var(--muted);margin-top:8px;min-height:1.4em}
+@media(max-width:860px){.app{grid-template-columns:minmax(0,1fr)}.stage{height:56vh}}
+
+#tint{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 40% 50%,rgba(255,60,170,.55),rgba(255,60,170,0) 70%)}
+.stage.ar #tint{z-index:0}
+.sw{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-right:6px;border:1px solid var(--line)}
+.stg{font-size:13px;color:var(--fg);line-height:1.45;min-height:3.6em}
+.btns2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+</style>
+</head><body>
+<div class="app">
+  <header>
+    <span class="step">4 · 18–25 s · AR v4</span>
+    <h1>Phản ứng với axit thiobarbituric (TBA) tạo phức hồng</h1>
+  </header>
+
+  <div class="stage">
+    <div id="tint"></div>
+    <canvas id="view" aria-label="Mô hình 3D phản ứng TBA, kéo để xoay"></canvas>
+    <div class="legend">
+      <span><i style="background:#2fb8ff"></i>Mảnh đường-axit</span>
+      <span><i style="background:#ff5a4d"></i>Nhóm cacbonyl</span>
+      <span><i style="background:#ffd23f"></i>TBA (thiobarbituric)</span>
+      <span><i style="background:#ff4fb0"></i>Phức hồng</span>
+    </div>
+    <canvas id="over"></canvas><div id="phStrip" hidden><span>25 s</span><span>chụm ở đây<br>để chỉnh thời gian</span><span>18 s</span></div><video id="cam" playsinline muted hidden></video>
+    <div id="arBar"><button id="arClose">Thoát</button><span id="arPh">18.0 s</span><button id="arFlip">Đổi camera</button></div>
+    <div class="hint">Chuột: kéo để xoay · Tay: chụm ngón cái + trỏ rồi di chuyển</div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <button class="goal" id="camBtn" style="width:100%">Bật camera và điều khiển bằng tay</button>
+      <div class="msg" id="camMsg">Chụm ngón cái + trỏ rồi di chuyển để xoay. Hai tay cùng chụm rồi dang ra hoặc thu vào để phóng to. Chụm ở dải bên phải để kéo thời gian.</div>
+    </div>
+    <div class="card">
+      <label for="tm">Thời gian phản ứng <output id="tmOut">18.0 s</output></label>
+      <input type="range" id="tm" min="0" max="1000" step="1" value="0">
+      <div class="btns2"><button id="play">Tạm dừng</button><button id="reset">Làm lại</button></div>
+      <div class="row" style="display:block;margin-top:12px"><div class="stg" id="stg"></div></div>
+      <div class="row"><span>Màu dung dịch</span><span><i class="sw" id="swatch"></i></span></div>
+      <div class="row"><span>TBA đã liên kết</span><span id="bound">0/2</span></div>
+      <div class="row"><span>Hấp thụ cực đại</span><span id="lam">chưa có</span></div>
+      <label class="chk"><input type="checkbox" id="auto" checked> Tự xoay chậm</label>
+    </div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var canvas=$('view');
+  var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  var scene=new THREE.Scene();
+  var camera=new THREE.PerspectiveCamera(42,1,0.1,100);
+  camera.position.set(0,0,17);
+  var world=new THREE.Group(); scene.add(world);
+
+  function glowTex(a,b){var c=document.createElement('canvas');c.width=c.height=64;var x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,a);g.addColorStop(0.35,b);g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+  var texPink=glowTex('rgba(255,170,225,1)','rgba(255,60,170,0.55)');
+  var texWarm=glowTex('rgba(255,120,100,0.9)','rgba(255,70,50,0.35)');
+  function sprite(tex,size){var m=new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});var s=new THREE.Sprite(m);s.scale.set(size,size,1);return s;}
+  var sphereGeo=new THREE.SphereGeometry(1,18,14), cylGeo=new THREE.CylinderGeometry(1,1,1,8,1);
+  function C(h){return new THREE.Color(h);}
+  // tintable material: base color -> pink color
+  var tintables=[];
+  function M(hex,op,pinkHex,group){
+    var m=new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity:op==null?0.62:op,blending:THREE.AdditiveBlending,depthWrite:false});
+    if(pinkHex!=null){var t={m:m,a:C(hex),b:C(pinkHex),g:group};tintables.push(t);}
+    return m;
+  }
+  function V(x,y,z){return new THREE.Vector3(x,y,z);}
+  function atom(par,p,m,r){var o=new THREE.Mesh(sphereGeo,m);o.position.copy(p);o.scale.setScalar(r);par.add(o);return o;}
+  function bondMesh(m,w){var o=new THREE.Mesh(cylGeo,m);o.userData.w=w||0.055;return o;}
+  function placeBond(o,a,b){var d=new THREE.Vector3().subVectors(b,a),len=d.length();if(len<1e-4)return;o.position.copy(a).addScaledVector(d,0.5);o.scale.set(o.userData.w,len,o.userData.w);o.quaternion.setFromUnitVectors(V(0,1,0),d.normalize());}
+  function bond(par,a,b,m,w){var o=bondMesh(m,w);placeBond(o,a,b);par.add(o);return o;}
+
+  // ---- sugar-acid fragment (cyan ring + red dicarbonyl chain) ----
+  var frag, tgtA, tgtB;
+  (function(){
+    var g=new THREE.Group(), cy=M(0x2fb8ff), cyO=M(0x9af3ff), cyH=M(0xd8f8ff), cyB=M(0x1f9be0,0.5);
+    var red=M(0xff5a4d,0.8,0xff4fb0,'F'), redL=M(0xff9a8a,0.8,0xffb0e0,'F'), redB=M(0xff5a4d,0.55,0xd6338f,'F');
+    var P=[];for(var i=0;i<6;i++){var a=i*Math.PI/3;P.push(V(Math.cos(a)*1.15,(i%2?0.18:-0.18),Math.sin(a)*1.15));}
+    for(i=0;i<6;i++)bond(g,P[i],P[(i+1)%6],cyB,0.06);
+    atom(g,P[0],cyO,0.22);for(i=1;i<6;i++)atom(g,P[i],cy,0.2);
+    for(i=1;i<=4;i++){var a2=i*Math.PI/3,out=V(Math.cos(a2),0,Math.sin(a2)),up=(i%2?1:-1);
+      var o=P[i].clone().addScaledVector(out,0.75).add(V(0,up*0.55,0)),h=o.clone().addScaledVector(out,0.38).add(V(0,up*0.22,0));
+      bond(g,P[i],o,cyB);bond(g,o,h,cyB,0.04);atom(g,o,cyO,0.17);atom(g,h,cyH,0.1);}
+    var a5=5*Math.PI/3,o5=V(Math.cos(a5),0,Math.sin(a5)),tg=V(-Math.sin(a5),0,Math.cos(a5));
+    var Oe=P[5].clone().addScaledVector(o5,0.85);
+    var Ca=Oe.clone().addScaledVector(o5,0.8).add(V(0,0.3,0));
+    var Oa=Ca.clone().addScaledVector(tg,-0.85).add(V(0,0.25,0));
+    var Cb=Ca.clone().addScaledVector(o5,0.9).add(V(0,-0.3,0));
+    var Ob=Cb.clone().addScaledVector(tg,0.85).add(V(0,-0.2,0));
+    var Hb=Cb.clone().addScaledVector(o5,0.5).add(V(0,0.55,0));
+    bond(g,P[5],Oe,cyB);atom(g,Oe,cyO,0.17);
+    bond(g,Oe,Ca,redB);atom(g,Ca,red,0.22);
+    bond(g,Ca,Oa,redB,0.08);atom(g,Oa,redL,0.2);
+    bond(g,Ca,Cb,redB);atom(g,Cb,red,0.22);
+    bond(g,Cb,Ob,redB,0.08);atom(g,Ob,redL,0.2);
+    bond(g,Cb,Hb,redB,0.04);atom(g,Hb,redL,0.1);
+    g.rotation.x=Math.PI/2; g.position.set(-2.4,-0.3,0); g.updateMatrix();
+    tgtA=Ca.clone().applyMatrix4(g.matrix); tgtB=Cb.clone().applyMatrix4(g.matrix);
+    world.add(g); frag=g;
+    // warm halo on the reactive carbonyls
+    var h1=sprite(texWarm,1.6);h1.position.copy(tgtA);world.add(h1);
+    var h2=sprite(texWarm,1.6);h2.position.copy(tgtB);world.add(h2);
+    frag.userData.halos=[h1,h2];
+  })();
+
+  // ---- TBA molecules ----
+  function buildTBA(tag){
+    var g=new THREE.Group();
+    var mC=M(0xffd23f,0.7,0xff4fb0,tag), mB=M(0xe0a800,0.5,0xd6338f,tag), mS=M(0xfff2a0,0.8,0xffc0e8,tag), mO=M(0xffb347,0.8,0xffa0d8,tag), mH=M(0xfff6c8,0.7,0xffd6ee,tag), mN=M(0xffe36b,0.7,0xff8fd0,tag);
+    var R=1.0,P=[];for(var k=0;k<6;k++){var a=k*Math.PI/3;P.push(V(Math.cos(a)*R,Math.sin(a)*R,0));}
+    for(k=0;k<6;k++)bond(g,P[k],P[(k+1)%6],mB,0.06);
+    var kind=['C5','C4','N','C2','N','C6'];
+    var oxy=[];
+    for(k=0;k<6;k++){
+      var u=P[k].clone().normalize();
+      atom(g,P[k],kind[k]==='N'?mN:mC,0.19);
+      if(kind[k]==='C4'||kind[k]==='C6'){var o=P[k].clone().addScaledVector(u,0.85);bond(g,P[k],o,mB,0.08);atom(g,o,mO,0.2);oxy.push(o);}
+      if(kind[k]==='C2'){var s=P[k].clone().addScaledVector(u,0.95);bond(g,P[k],s,mB,0.08);atom(g,s,mS,0.27);}
+      if(kind[k]==='N'){var h=P[k].clone().addScaledVector(u,0.6);bond(g,P[k],h,mB,0.04);atom(g,h,mH,0.1);}
+      if(kind[k]==='C5'){var h1=P[k].clone().addScaledVector(u,0.55).add(V(0,0.4,0.2)),h2=P[k].clone().addScaledVector(u,0.55).add(V(0,-0.4,-0.2));bond(g,P[k],h1,mB,0.04);atom(g,h1,mH,0.1);bond(g,P[k],h2,mB,0.04);atom(g,h2,mH,0.1);}
+    }
+    g.userData.c5=P[0].clone();
+    g.userData.glows=oxy.map(function(o){var s=sprite(texPink,1.5);s.position.copy(o);s.material.opacity=0;g.add(s);return s;});
+    world.add(g);return g;
+  }
+  var tba=[buildTBA('T0'),buildTBA('T1'),buildTBA('T2')];
+  function rot(v,ang){var c=Math.cos(ang),s=Math.sin(ang);return V(v.x*c-v.y*s,v.x*s+v.y*c,0);}
+  var cen=V(-1.0,0,0);
+  var dirA=tgtA.clone().sub(cen).setZ(0).normalize(), dirB=tgtB.clone().sub(cen).setZ(0).normalize();
+  var E=[tgtA.clone().addScaledVector(rot(dirA,0.75),2.2), tgtB.clone().addScaledVector(rot(dirB,-0.85),2.2)];
+  E[0].z=0;E[1].z=0;
+  var S=[V(-4.8,4.2,-1.5),V(-1.5,-4.6,1.2),V(5.2,-3.2,-1)];
+  var faceAng=[Math.atan2(tgtA.y-E[0].y,tgtA.x-E[0].x),Math.atan2(tgtB.y-E[1].y,tgtB.x-E[1].x)];
+  // bonds between TBA C5 and the carbonyl carbons
+  var bm=[M(0xffd23f,0.9,0xff4fb0,'B'),M(0xffd23f,0.9,0xff4fb0,'B')];
+  var links=[bondMesh(bm[0],0.09),bondMesh(bm[1],0.09)];links.forEach(function(l){l.visible=false;world.add(l);});
+  var halo=sprite(texPink,8);halo.material.opacity=0;halo.position.set(-1.0,0,-0.5);world.add(halo);
+
+  function clamp(x){return Math.max(0,Math.min(1,x));}
+  function sm(x){x=clamp(x);return x*x*(3-2*x);}
+  var tmpA=new THREE.Vector3(),tmpB=new THREE.Vector3();
+  var kTint=0;
+  function update(p,t){
+    var ap=sm((p-0.1)/0.45);
+    for(var i=0;i<2;i++){
+      var g=tba[i];
+      g.position.copy(S[i]).lerp(E[i],ap);
+      g.position.y+=Math.sin(t*1.3+i*2)*0.18*(1-ap);
+      g.rotation.z=faceAng[i]+(1-ap)*(1.6+i);
+      g.rotation.x=(1-ap)*0.9*(i?1:-1);
+    }
+    var f=tba[2];f.position.set(S[2].x+Math.sin(t*0.5)*0.5,S[2].y+Math.cos(t*0.6)*0.4,S[2].z);f.rotation.z=t*0.25;f.rotation.x=0.4;
+    var bk=sm((p-0.5)/0.12);
+    var ends=[tgtA,tgtB];
+    for(i=0;i<2;i++){
+      var c5=tba[i].userData.c5.clone();tba[i].updateMatrix();c5.applyMatrix4(tba[i].matrix);
+      links[i].visible=bk>0.01;
+      if(bk>0.01){placeBond(links[i],c5,ends[i]);links[i].userData.w=0.03+0.07*bk;links[i].scale.x=links[i].scale.z=links[i].userData.w;}
+      bm[i].opacity=0.9*bk;
+    }
+    kTint=sm((p-0.68)/0.25);
+    tintables.forEach(function(x){
+      var k=(x.g==='T2')?0:kTint; x.m.color.copy(x.a).lerp(x.b,k);
+    });
+    for(i=0;i<2;i++)tba[i].userData.glows.forEach(function(s,j){s.material.opacity=kTint*(0.65+0.3*Math.sin(t*3+j+i));});
+    halo.material.opacity=0.55*kTint*(0.85+0.15*Math.sin(t*2));halo.scale.setScalar(4+5*kTint);
+    frag.userData.halos.forEach(function(h,j){h.material.opacity=(1-sm((p-0.45)/0.25))*(0.75+0.25*Math.sin(t*3+j));});
+    return kTint;
+  }
+
+  // ---- UI state ----
+  var p=0,playing=true,auto=$('auto'); if(reduce)auto.checked=false;
+  var tm=$('tm'),btnPlay=$('play'),btnReset=$('reset');
+  function setP(v){p=clamp(v);tm.value=Math.round(p*1000);}
+  window.__setP=setP;
+  function setPh(v){playing=false;btnPlay.textContent='Phát';setP((v-2)/10);}   // used by hand strip: 12 -> 25 s, 2 -> 18 s
+  tm.addEventListener('input',function(){playing=false;btnPlay.textContent='Phát';p=tm.value/1000;});
+  btnPlay.onclick=function(){if(p>=1)setP(0);playing=!playing;btnPlay.textContent=playing?'Tạm dừng':'Phát';};
+  btnReset.onclick=function(){setP(0);playing=true;btnPlay.textContent='Tạm dừng';};
+  function stageText(pp){
+    if(pp<0.1)return 'Mảnh đường-axit có nhóm cacbonyl (đỏ) và các phân tử TBA (vàng)';
+    if(pp<0.5)return 'TBA di chuyển lại gần nhóm cacbonyl';
+    if(pp<0.7)return 'Carbon hoạt động của TBA tạo liên kết với cacbonyl';
+    return 'Phức hợp màu hồng đã hình thành (hấp thụ cực đại thường ở khoảng 532 nm)';
+  }
+  var pyel=C(0xffe38a),ppink=C(0xff4fb0),tmpC=new THREE.Color();
+
+  // ---- interaction: drag to rotate, wheel / pinch to zoom ----
+  var ptrs={},lastDist=0;
+  canvas.addEventListener('pointerdown',function(e){canvas.setPointerCapture(e.pointerId);ptrs[e.pointerId]={x:e.clientX,y:e.clientY};});
+  canvas.addEventListener('pointermove',function(e){
+    var q0=ptrs[e.pointerId];if(!q0)return;var ids=Object.keys(ptrs);
+    if(ids.length===1){world.quaternion.premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler((e.clientY-q0.y)*0.008,(e.clientX-q0.x)*0.008,0,'XYZ')));}
+    else if(ids.length===2){var o=ids[0]==e.pointerId?ptrs[ids[1]]:ptrs[ids[0]];var d=Math.hypot(e.clientX-o.x,e.clientY-o.y);if(lastDist)zoom((lastDist-d)*0.03);lastDist=d;}
+    q0.x=e.clientX;q0.y=e.clientY;
+  });
+  function up(e){delete ptrs[e.pointerId];lastDist=0;}
+  canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+  function zoom(d){camera.position.z=Math.max(7,Math.min(26,camera.position.z+d));}
+  canvas.addEventListener('wheel',function(e){e.preventDefault();zoom(e.deltaY*0.01);},{passive:false});
+  function resize(){var r=canvas.parentNode.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();}
+  if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas.parentNode);else window.addEventListener('resize',resize);
+  resize();
+
+  var holder=new THREE.Group();while(world.children.length)holder.add(world.children[0]);holder.position.set(0.9,-1.2,0);world.add(holder);
+
+  // ---------- hand tracking (MediaPipe Hands) ----------
+  var camBtn=$('camBtn'), camMsg=$('camMsg'), over=$('over'), ox=over.getContext('2d'), vid=$('cam'), strip=$('phStrip');
+  var facing='user', stage=document.querySelector('.stage'), handsObj=null, running=false, busy=false, stream=null, handBusy=false;
+  var CONN=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  var prevPt=null, prevDist=0, pinchOn=[false,false];
+  function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+  function stopHands(){
+    running=false; handBusy=false; prevPt=null; prevDist=0;
+    if(stream){stream.getTracks().forEach(function(t){t.stop();});stream=null;}
+    vid.hidden=true; strip.hidden=true; stage.classList.remove('ar'); camera.position.z=17; ox.clearRect(0,0,over.width,over.height);
+    camBtn.textContent='Bật camera và điều khiển bằng tay';
+  }
+  camBtn.onclick=function(){
+    if(running){stopHands();return;}
+    if(typeof Hands==='undefined'){camMsg.textContent='Chưa tải được thư viện nhận diện tay. Hãy kiểm tra kết nối mạng.';return;}
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camMsg.textContent='Trình duyệt này không cho dùng camera. Hãy mở trang qua HTTPS.';return;}
+    camMsg.textContent='Đang xin quyền camera...';
+    navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:640,height:480},audio:false}).then(function(st){
+      stream=st; vid.srcObject=st; vid.hidden=false; strip.hidden=false; stage.classList.add('ar'); camera.position.z=25; vid.style.transform=facing==='user'?'scaleX(-1)':'none'; vid.play();
+      if(!handsObj){
+        handsObj=new Hands({locateFile:function(f){return 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/'+f;}});
+        handsObj.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+        handsObj.onResults(onHands);
+      }
+      running=true; camBtn.textContent='Tắt camera'; camMsg.textContent='Giơ tay vào khung hình, rồi chụm ngón cái và ngón trỏ.';
+      loop();
+    }).catch(function(){camMsg.textContent='Không mở được camera. Hãy cho phép quyền camera cho trang này.';});
+  };
+  $('arClose').onclick=function(){stopHands();};
+  $('arFlip').onclick=function(){facing=facing==='user'?'environment':'user';stopHands();camBtn.onclick();};
+  function loop(){
+    if(!running)return;
+    if(vid.readyState>=2&&!busy){busy=true;handsObj.send({image:vid}).then(function(){busy=false;}).catch(function(){busy=false;});}
+    requestAnimationFrame(loop);
+  }
+  function onHands(res){
+    if(!running)return;
+    var W=over.clientWidth,H=over.clientHeight;
+    if(over.width!==W||over.height!==H){over.width=W;over.height=H;}
+    ox.clearRect(0,0,W,H);
+    var vw=vid.videoWidth||640, vh=vid.videoHeight||480, sc=Math.max(W/vw,H/vh), ofx=(vw*sc-W)/2, ofy=(vh*sc-H)/2, mir=facing==='user';
+    function m(p){var x=mir?1-p.x:p.x; return {x:(x*vw*sc-ofx)/W, y:(p.y*vh*sc-ofy)/H};}
+    var hs=res.multiHandLandmarks||[], pts=[];
+    hs.forEach(function(lm,i){
+      var size=dist(lm[0],lm[9])||1, d=dist(lm[4],lm[8])/size;
+      var on=pinchOn[i]?d<0.55:d<0.38; pinchOn[i]=on;
+      var mp=m({x:(lm[4].x+lm[8].x)/2,y:(lm[4].y+lm[8].y)/2}), px=mp.x, py=mp.y;
+      ox.shadowColor='#4fe3ff'; ox.shadowBlur=10;
+      ox.strokeStyle='rgba(120,235,255,.75)'; ox.lineWidth=1.5;
+      CONN.forEach(function(c){var a=m(lm[c[0]]),b=m(lm[c[1]]);ox.beginPath();ox.moveTo(a.x*W,a.y*H);ox.lineTo(b.x*W,b.y*H);ox.stroke();});
+      ox.fillStyle='rgba(200,250,255,.9)';
+      lm.forEach(function(p){var q=m(p);ox.beginPath();ox.arc(q.x*W,q.y*H,2.6,0,7);ox.fill();});
+      ox.lineWidth=3; ox.strokeStyle=on?'#5cf2a0':'#4fd1ff';
+      ox.beginPath();ox.arc(px*W,py*H,on?10:16,0,7);ox.stroke();
+      if(on){ox.fillStyle='rgba(92,242,160,.5)';ox.fill();pts.push({x:px,y:py});}
+    });
+    for(var j=hs.length;j<pinchOn.length;j++)pinchOn[j]=false;
+    var phPts=pts.filter(function(p){return p.x>0.87;}), free=pts.filter(function(p){return p.x<=0.87;});
+    handBusy=pts.length>0;
+    if(phPts.length){
+      var y=Math.max(0,Math.min(1,(phPts[0].y-0.08)/0.84));
+      setPh(12-y*10);
+    }
+    if(free.length>=2){
+      var dd=dist(free[0],free[1]);
+      if(prevDist) zoom(-(dd-prevDist)*40);
+      prevDist=dd; prevPt=null;
+    } else if(free.length===1){
+      var p=free[0];
+      if(prevPt){
+        var q=new THREE.Quaternion().setFromEuler(new THREE.Euler((p.y-prevPt.y)*6,(p.x-prevPt.x)*6,0,'XYZ'));
+        world.quaternion.premultiply(q);
+      }
+      prevPt={x:p.x,y:p.y}; prevDist=0;
+    } else { prevPt=null; prevDist=0; }
+  }
+
+
+
+  var last=performance.now(),txt=0,tintEl=$('tint');
+  function tick(now){
+    requestAnimationFrame(tick);
+    var dt=Math.min(0.1,(now-last)/1000);last=now;
+    if(playing){p+=dt/7;if(p>=1){p=1;playing=false;btnPlay.textContent='Phát lại';}tm.value=Math.round(p*1000);}
+    var t=now/1000,k=update(p,t);
+    if(auto.checked&&!handBusy&&Object.keys(ptrs).length===0)world.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(V(0,1,0),0.0022));
+    tintEl.style.opacity=(0.5*k).toFixed(3);
+    if(++txt%6===0){
+      var sec=18+7*p;
+      $('tmOut').textContent=sec.toFixed(1)+' s';$('arPh').textContent=sec.toFixed(1)+' s';
+      $('stg').textContent=stageText(p);
+      $('bound').textContent=(links[0].visible&&bm[0].opacity>0.6?1:0)+(links[1].visible&&bm[1].opacity>0.6?1:0)+'/2';
+      tmpC.copy(pyel).lerp(ppink,k);$('swatch').style.background='#'+tmpC.getHexString();
+      $('lam').textContent=k>0.85?'≈ 532 nm':'chưa có';
+    }
+    renderer.render(scene,camera);
+  }
+  requestAnimationFrame(tick);
+})();
+
+</script>
+</body></html>
